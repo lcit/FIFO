@@ -23,9 +23,11 @@
 #include <errno.h>
 #include <queue>
 #include <memory>
+#include <sys/time.h>
 
 using namespace std;
 
+// TODO: change names!!
 enum class FIFOdumpTypes {
 	DumpNewItem = 0, ///< with this option the FIFO dumps the new items
 	DumpFirstEntry = 1 ///< with this option the FIFO dumps the oldest item entered
@@ -140,6 +142,44 @@ public:
 		if(res < 0)
 			throw std::runtime_error("FIFO::push(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
 	}
+    
+    /// Retrieves an item from the FIFO.
+    ///
+    /// The oldest element in the FIFO is pulled. If the fifo is empty
+    /// this function blocks until new data are available or the timeout is reached.
+    ///
+    /// @param item: element pulled from the fifo
+    /// @param timeout: an integer defining the max amount of time to wait for new element in the FIFO
+    /// @return 1: success, 0: timeout reached
+    virtual int pull(T& item, unsigned timeout) {
+        int res = pthread_mutex_lock(&_mutex);
+        if(res < 0)
+            throw std::runtime_error("FIFO::pull(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+
+        // if FIFO is empty wait until new data is available.
+        // This while loop is necessary if there are multiple
+        // threads pulling at the same time!
+        while(_queue.empty()) {
+            struct timespec timeout_ts;
+            struct timeval now_tv;
+            gettimeofday(&now_tv, NULL);
+            timeout_ts.tv_sec = now_tv.tv_sec+timeout;
+            timeout_ts.tv_nsec = now_tv.tv_usec*1000UL;
+            res = pthread_cond_timedwait(&_condv, &_mutex, &timeout_ts);
+            if(res == ETIMEDOUT) {
+                res = pthread_mutex_unlock(&_mutex);
+                if(res < 0)
+                    throw std::runtime_error("FIFO::pull(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+                return 0;
+            } else if(res < 0)
+                throw std::runtime_error("FIFO::pull(): pthread_cond_timedwait() failed due to \"" + std::string(std::strerror(res)) + "\"");
+        }
+        item = pull_pop_first();
+        res = pthread_mutex_unlock(&_mutex);
+        if(res < 0)
+            throw std::runtime_error("FIFO::pull(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+        return 1;
+    }
 	
 	/// Returns the current number of item stocked. (Thread-safe)
 	///
