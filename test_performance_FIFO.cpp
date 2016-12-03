@@ -2,10 +2,8 @@
 	Author: Leonardo Citraro
 	Company: 
 	Filename: test_performance_FIFO.cpp
-	Last modifed:   28.11.2016 by Leonardo Citraro
-	Description:	Test of performance. The write (push) and read (pull) 
-                    speeds are computed here using a single producer and 
-                    a single consumer.
+	Last modifed:   03.12.2016 by Leonardo Citraro
+	Description:	Test of performance.
 
 	=========================================================================
 
@@ -20,6 +18,8 @@
 #include <cassert>
 #include <algorithm>
 #include <utility>
+#include <thread>
+#include <atomic>
 #include "FIFO.hpp"
 
 //#define DEBUG 1
@@ -67,7 +67,7 @@ auto generate_string = [](size_t len){
 class ITEM {
 	public:
 		std::string _id;
-		int _value;		
+		int _value;	
 		ITEM(const string id, const int value):_id(id), _value(value) {}
 		~ITEM(){}
 };
@@ -120,25 +120,94 @@ auto read_test(size_t fifo_size, size_t string_size){
     return (n_pulls*1000000000)/duration;
 }
 
+bool stop = false;
+const int Npushes = 1000000;
+std::atomic<int> stop_count(0);
+MyFIFO fifo(100);
+
+int Nproducers, Nconsumers;
+
+void producer(){
+	for(unsigned int i=0; i<Npushes; i++){
+		std::unique_ptr<ITEM> item = std::make_unique<ITEM>("id", i);
+#ifdef DEBUG        
+		cout << pthread_self() << " Pushing item: " << i << endl;
+#endif
+		while(fifo.push(item)<0){
+            usleep(1);
+#ifdef DEBUG            
+            cout << pthread_self() << " Fifo full: " << i << endl;
+#endif            
+        }
+	}
+}
+
+void consumer(){
+	while(1){
+		std::unique_ptr<ITEM> item;
+		if(fifo.pull(item, 1) > 0) {
+            ;
+#ifdef DEBUG        
+            cout << pthread_self() << " Pulled item ------: " << item->_value << endl;
+#endif            
+        } else
+            break;
+	}
+#ifdef DEBUG    
+    cout << pthread_self() << " stopped" << endl;
+#endif    
+}
+
+void run_threads_helper(size_t Nproducers, size_t Nconsumers){
+    std::vector<std::thread> threads_producers(Nproducers);
+    for(size_t i=0; i<Nproducers; ++i){
+        threads_producers[i] = std::thread(producer);
+    }   
+    std::vector<std::thread> threads_consumers(Nconsumers);
+    for(size_t i=0; i<Nconsumers; ++i){
+        threads_consumers[i] = std::thread(consumer);
+    }
+    for(size_t i=0; i<Nproducers; ++i){
+        threads_producers[i].join();
+    }
+    for(size_t i=0; i<Nconsumers; ++i){
+        threads_consumers[i].join();
+    }
+#ifdef DEBUG
+    std::cout << "run_threads() its over" << std::endl;
+#endif
+}
+
+double run_threads(size_t Nproducers, size_t Nconsumers){
+    double execution_time = measure<std::chrono::milliseconds>::run([&](){return run_threads_helper(Nproducers, Nconsumers);});
+#ifdef DEBUG    
+    std::cout << "run_threads() measured time: " << execution_time/1000000.0 << std::endl;
+#endif    
+    return Npushes*Nproducers/(execution_time);
+}
+
 int main(int argc, char* argv[]){
 	
     std::array<size_t,3> fifo_sizes = {10,50,200};
     std::array<size_t,4> string_sizes = {10,1000,10000,1000000};
     
-    for(size_t i=0; i<3; ++i){
-        for(size_t j=0; j<4; ++j){
-            auto write_results = mean_stddev<100>::run([&](){return write_test(fifo_sizes[i],string_sizes[j]);});
-            auto read_results = mean_stddev<100>::run([&](){return read_test(fifo_sizes[i],string_sizes[j]);});
-            std::cout   << "fifo-size=" << fifo_sizes[i] << " item-size=" << string_sizes[j] << "\n"
-                        << "Push-speed: " << std::setw(8) << static_cast<int>(write_results.first) 
-                        << std::setw(9) << ("+-" + std::to_string(static_cast<int>(write_results.second))) 
-                        << " [push-per-second +- std-dev] \n"
-                        << "Pull-speed: " << std::setw(8) << static_cast<int>(read_results.first) 
-                        << std::setw(9) << ("+-" + std::to_string(static_cast<int>(read_results.second))) 
-                        << " [pull-per-second +- std-dev]" << "\n"
-                        << "------------------------------------------------------" << "\n";
+    std::cout << "Npushes=" << Npushes << "\n";
+    std::cout << "        --------------------------- Consumer threads ---------------------------------" << "\n";
+    std::cout << "   ";
+    for(size_t j=1; j<9; ++j)
+        std::cout   << std::setw(10) << j;
+    std::cout << "\n";
+    for(size_t i=1; i<9; ++i){
+        std::cout   << "   " << i << "   ";
+        for(size_t j=1; j<9; ++j){
+            auto results = mean_stddev<3>::run([&](){return run_threads(i,j);});
+            std::cout   << std::setw(4) << static_cast<int>(results.first)
+                        << std::setw(5) << ("+-" + std::to_string(static_cast<int>(results.second))) 
+                        << " ";
         }
+        std::cout << "\n";
     }
-               
+    std::cout << "^^^^^^\nProducers\nthreads\n"; 
+    
 	return 0;
 }

@@ -12,19 +12,16 @@ OBJS        =
 LDFLAGS     = -g $(DEPS)
 # /////////////////////////////////////////////////////////////////////////
 
-all: test_performance_FIFO test_performance2_FIFO test_sFIFO
-
-test_simple_FIFO: test_simple_FIFO.cpp
-	$(CPP) $(CPPFLAGS) -o test_simple_FIFO test_simple_FIFO.cpp FIFO.hpp $(OBJS) $(LDFLAGS)
+all: test_functional_FIFO test_performance_FIFO test_sFIFO
 
 test_performance_FIFO: test_performance_FIFO.cpp
 	$(CPP) $(CPPFLAGS) -o test_performance_FIFO test_performance_FIFO.cpp FIFO.hpp $(OBJS) $(LDFLAGS)
 
-test_performance2_FIFO: test_performance2_FIFO.cpp
-	$(CPP) $(CPPFLAGS) -o test_performance2_FIFO test_performance2_FIFO.cpp FIFO.hpp $(OBJS) $(LDFLAGS)
+test_functional_FIFO: test_functional_FIFO.cpp
+	$(CPP) $(CPPFLAGS) -o test_functional_FIFO test_functional_FIFO.cpp FIFO.hpp $(OBJS) $(LDFLAGS)
 
 test_sFIFO: test_sFIFO.cpp
 	$(CPP) $(CPPFLAGS) -o test_sFIFO test_sFIFO.cpp sFIFO.hpp $(OBJS) $(LDFLAGS)
 
 clean:
-	-rm -f *.o; rm test_FIFO; rm test_sFIFO
+	-rm -f *.o; rm test_FIFO; rm test_sFIFO; rm test_performance_FIFO; rm test_functional_FIFO

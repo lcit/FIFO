@@ -129,8 +129,10 @@ public:
 		int res = pthread_mutex_lock(&_mutex);
 		if(res < 0)
 			throw std::runtime_error("FIFO::pull(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+            
+        //std::cout << "Hello form pull : " << pthread_self() << "\n";
 
-		// if FIFO is empty wait until new data is avvailable.			
+		// if FIFO is empty wait until new data is avvailable.
 		// This while loop is necessary if there are multiple 
 		// threads pulling at the same time!
 		while(_queue.empty()){ 
@@ -155,6 +157,8 @@ public:
         int res = pthread_mutex_lock(&_mutex);
         if(res < 0)
             throw std::runtime_error("FIFO::pull(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+            
+        //std::cout << "Hello form pull timeout: " << pthread_self() << "\n";
 
         // if FIFO is empty wait until new data is available.
         // This while loop is necessary if there are multiple
@@ -277,13 +281,20 @@ protected:
 	/// Gets the first item then pop it	
 	///
 	/// @param no param
-	/// @return the item	
+	/// @return the item
+    /*	
 	virtual T pull_pop_first(){
 		// move() never throw
 		T item = std::move(_queue.front());
 		_queue.pop();
 		return std::move(item);
-	}		
+	}	
+    * */
+    virtual T pull_pop_first(){
+		T item = std::move(_queue.front());
+		_queue.pop();	
+        return std::move(item);
+    }
 
 	/// Add item into the FIFO
 	///
