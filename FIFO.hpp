@@ -19,9 +19,11 @@
 #include <cstring>
 #include <string>
 #include <stdexcept>
-#include <pthread.h>
+#include <mutex>
+#include <condition_variable>
 #include <errno.h>
 #include <queue>
+#include <chrono>
 #include <memory>
 #include <sys/time.h>
 
@@ -46,39 +48,17 @@ enum class FIFOdumpTypes {
 template <typename T, FIFOdumpTypes dump_type> class FIFO{
 
 protected:
-	queue<T>         _queue; 
-	int              _max_size;  
-	pthread_cond_t   _condv; 
-	pthread_mutex_t  _mutex;
+	queue<T>                _queue; 
+	int                     _max_size;  
+	std::condition_variable _condv; 
+	std::mutex              _mutex;
 
 public:
 	FIFO() : _max_size(10.0){
-		// init the mutexe and the conditional variable
-		int res = pthread_mutex_init(&_mutex, NULL);	
-		if(res < 0)
-			throw std::runtime_error("FIFO::FIFO(): pthread_mutex_init() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		res = pthread_cond_init(&_condv, NULL);
-		if(res < 0)
-			throw std::runtime_error("FIFO::FIFO(): pthread_cond_init() failed due to \"" + std::string(std::strerror(res)) + "\"");
 	}
 	FIFO(int size) : _max_size(size){
-		// init the mutexe and the conditional variable
-		int res = pthread_mutex_init(&_mutex, NULL);
-		if(res < 0)
-			throw std::runtime_error("FIFO::FIFO(): pthread_mutex_init() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		res = pthread_cond_init(&_condv, NULL);
-		if(res < 0)
-			throw std::runtime_error("FIFO::FIFO(): pthread_cond_init() failed due to \"" + std::string(std::strerror(res)) + "\"");
 	}
 	virtual ~FIFO(){
-		// pthread_mutex_destroy() and pthread_cond_destroy() may fail if functions like  
-		// pthread_cond_timedwait() or pthread_cond_wait() are active
-		int res = pthread_mutex_destroy(&_mutex);
-		if(res < 0){
-			pthread_cond_signal(&_condv);
-			pthread_mutex_destroy(&_mutex);
-		}
-		pthread_cond_destroy(&_condv);
 	}
 
 public:	
@@ -90,9 +70,7 @@ public:
 	/// @return no return
 	int push(T& item){
 		int succ = 0;
-		int res = pthread_mutex_lock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::push(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+		std::unique_lock<std::mutex> _lock(_mutex);
 		// if the FIFO is full one item is dumped
 		if(is_full_helper()){
 			// choose dumping method
@@ -110,11 +88,7 @@ public:
 			// add item to the FIFO
 			push_last(item); 
 		}
-		// pthread_cond_signal() fails only if _condv is not initialized, so we don't need to take care of errors here
-		pthread_cond_signal(&_condv);
-		res = pthread_mutex_unlock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::push(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+		_condv.notify_one();
 		return succ;
 	}
 
@@ -126,23 +100,15 @@ public:
 	/// @param item: element pulled from the fifo
 	/// @return no return
 	void pull(T& item){
-		int res = pthread_mutex_lock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::pull(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-            
-        //std::cout << "Hello form pull : " << pthread_self() << "\n";
+		std::unique_lock<std::mutex> _lock(_mutex);
 
 		// if FIFO is empty wait until new data is avvailable.
 		// This while loop is necessary if there are multiple 
 		// threads pulling at the same time!
 		while(_queue.empty()){ 
-			// pthread_cond_wait() do not fail unless you have huge issues
-			pthread_cond_wait(&_condv, &_mutex);	
+			_condv.wait(_lock);
 		} 
 		item = pull_pop_first();
-		res = pthread_mutex_unlock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::push(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
 	}
     
     /// Retrieves an item from the FIFO.
@@ -154,9 +120,7 @@ public:
     /// @param timeout: an integer defining the max amount of time to wait for new element in the FIFO
     /// @return 1: success, 0: timeout reached
     virtual int pull(T& item, unsigned timeout) {
-        int res = pthread_mutex_lock(&_mutex);
-        if(res < 0)
-            throw std::runtime_error("FIFO::pull(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+        std::unique_lock<std::mutex> _lock(_mutex);
             
         //std::cout << "Hello form pull timeout: " << pthread_self() << "\n";
 
@@ -164,24 +128,10 @@ public:
         // This while loop is necessary if there are multiple
         // threads pulling at the same time!
         while(_queue.empty()) {
-            struct timespec timeout_ts;
-            struct timeval now_tv;
-            gettimeofday(&now_tv, NULL);
-            timeout_ts.tv_sec = now_tv.tv_sec+timeout;
-            timeout_ts.tv_nsec = now_tv.tv_usec*1000UL;
-            res = pthread_cond_timedwait(&_condv, &_mutex, &timeout_ts);
-            if(res == ETIMEDOUT) {
-                res = pthread_mutex_unlock(&_mutex);
-                if(res < 0)
-                    throw std::runtime_error("FIFO::pull(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+            if(_condv.wait_for(_lock, std::chrono::seconds(timeout))==std::cv_status::timeout)
                 return 0;
-            } else if(res < 0)
-                throw std::runtime_error("FIFO::pull(): pthread_cond_timedwait() failed due to \"" + std::string(std::strerror(res)) + "\"");
         }
         item = pull_pop_first();
-        res = pthread_mutex_unlock(&_mutex);
-        if(res < 0)
-            throw std::runtime_error("FIFO::pull(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
         return 1;
     }
 	
@@ -190,14 +140,8 @@ public:
 	/// @param no param
 	/// @return current number of item in the fifo
 	int size(){
-		int res = pthread_mutex_lock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::size(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		int size = size_helper();
-		res = pthread_mutex_unlock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::size(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		return size;
+		std::unique_lock<std::mutex> _lock(_mutex);
+		return size_helper();
 	}
 	
 	/// Sets the max FIFO size. (Thread-safe)
@@ -205,13 +149,8 @@ public:
 	/// @param size: max fifo size
 	/// @return no param
 	void set_max_size(int size){
-		int res = pthread_mutex_lock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::set_max_size(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+		std::unique_lock<std::mutex> _lock(_mutex);
 		set_max_size_helper(size);
-		res = pthread_mutex_unlock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::set_max_size(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
 	}
 	
 	/// Gets the max FIFO size. (Thread-safe)
@@ -219,14 +158,8 @@ public:
 	/// @param no param
 	/// @return max fifo size
 	int get_max_size(){
-		int res = pthread_mutex_lock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::get_max_size(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		int size = get_max_size_helper();
-		res = pthread_mutex_unlock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::get_max_size(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		return size;
+		std::unique_lock<std::mutex> _lock(_mutex);
+		return get_max_size_helper();
 	}
 	
 	/// Delete all the items. (Thread-safe)
@@ -234,18 +167,12 @@ public:
 	/// @param no param
 	/// @return no param
 	void clear(){
-		int res = pthread_mutex_lock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::clear(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+		std::unique_lock<std::mutex> _lock(_mutex);
 		try{
 			clear_helper();
 		}catch(...){
-			pthread_mutex_unlock(&_mutex);
 			throw;
 		}
-		res = pthread_mutex_unlock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::clear(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
 	}
     
 	/// Check if FIFO is full. (Thread-safe)
@@ -253,15 +180,8 @@ public:
 	/// @param no param
 	/// @return no param
 	bool is_full(){
-		bool succ;
-		int res = pthread_mutex_lock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::clear(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		succ = is_full_helper();
-		res = pthread_mutex_unlock(&_mutex);
-		if(res < 0)
-			throw std::runtime_error("FIFO::clear(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		return succ;
+		std::unique_lock<std::mutex> _lock(_mutex);
+		return is_full_helper();
 	}
     
 	
