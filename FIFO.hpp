@@ -2,7 +2,7 @@
 	Author: Leonardo Citraro
 	Company: 
 	Filename: FIFO.hpp
-	Last modifed: 10.07.2016 by Leonardo Citraro
+	Last modifed: 03.12.2016 by Leonardo Citraro
 	Description: Thread-safe FIFO based on the Standard C++ library queue
 				 template class.
 
