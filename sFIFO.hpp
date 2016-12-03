@@ -60,14 +60,8 @@ public:
 	/// @param no param
 	/// @return current number of item in the fifo
 	float size(){
-		int res = pthread_mutex_lock(&(this->_mutex));
-		if(res < 0)
-			throw std::runtime_error("sFIFO::size(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		float size = _size_seconds;
-		res = pthread_mutex_unlock(&(this->_mutex));
-		if(res < 0)
-			throw std::runtime_error("sFIFO::size(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		return size;
+		std::unique_lock<std::mutex> _lock(this->_mutex);
+		return _size_seconds;
 	}
 
 	/// Sets the max FIFO size. (Thread-safe)
@@ -75,13 +69,8 @@ public:
 	/// @param size: max fifo size
 	/// @return no param
 	void set_max_size(float size){
-		int res = pthread_mutex_lock(&(this->_mutex));
-		if(res < 0)
-			throw std::runtime_error("sFIFO::set_max_size(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
+		std::unique_lock<std::mutex> _lock(this->_mutex);
 		_max_size_seconds = size;
-		res = pthread_mutex_unlock(&(this->_mutex));
-		if(res < 0)
-			throw std::runtime_error("sFIFO::set_max_size(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
 	}
 
 	/// Gets the max FIFO size. (Thread-safe)
@@ -89,14 +78,8 @@ public:
 	/// @param no param
 	/// @return max fifo size
 	float get_max_size(){
-		int res = pthread_mutex_lock(&(this->_mutex));
-		if(res < 0)
-			throw std::runtime_error("sFIFO::get_max_size(): pthread_mutex_lock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		float size = _max_size_seconds;
-		res = pthread_mutex_unlock(&(this->_mutex));
-		if(res < 0)
-			throw std::runtime_error("sFIFO::get_max_size(): pthread_mutex_unlock() failed due to \"" + std::string(std::strerror(res)) + "\"");
-		return size;
+		std::unique_lock<std::mutex> _lock(this->_mutex);
+		return _max_size_seconds;
 	}        
 
 private:	
