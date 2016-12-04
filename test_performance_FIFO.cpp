@@ -68,57 +68,11 @@ class ITEM {
 	public:
 		std::string _id;
 		int _value;	
-		ITEM(const string id, const int value):_id(id), _value(value) {}
+		ITEM(const std::string id, const int value):_id(id), _value(value) {}
 		~ITEM(){}
 };
 
-using MyFIFO = FIFO<std::unique_ptr<ITEM>, FIFOdumpTypes::DumpNewItem>;
-
-auto write_test(size_t fifo_size, size_t string_size){
-
-    MyFIFO fifo(fifo_size);
-    
-    // generate a string for the ITEM so we can test ITEMS of dfferent size
-    std::string str = generate_string(string_size);   
-    
-    size_t n_pushes = fifo_size;
-    
-    auto duration = 0.0;
-    // write ITEMS into the fifo
-	for(auto i=0; i<n_pushes; ++i){
-		auto item = std::make_unique<ITEM>(str, i);
-        duration += measure<std::chrono::nanoseconds>::run([&](){return fifo.push(item);});
-	}
-    
-    // return the number of writes per second
-    return (n_pushes*1000000000)/duration;
-}
-
-auto read_test(size_t fifo_size, size_t string_size){
-
-    MyFIFO fifo(fifo_size);
-    
-    // generate a string for the ITEM so we can test ITEMS of dfferent size
-    std::string str = generate_string(string_size);
-    
-    size_t n_pulls = fifo_size;
-    
-    // fill the whole fifo
-    for(auto i=0; i<n_pulls; ++i){
-		auto item = std::make_unique<ITEM>(str, i);
-		fifo.push(item);
-	}
-    
-    auto duration = 0.0;
-    // read all the ITEMS form the fifo
-	for(auto i=0; i<n_pulls; ++i){
-		std::unique_ptr<ITEM> item;
-        duration += measure<std::chrono::nanoseconds>::run([&](){return fifo.pull(item);});
-	}
-    
-    // return the number of reads per second
-    return (n_pulls*1000000000)/duration;
-}
+using MyFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
 
 bool stop = false;
 const int Npushes = 1000000;
@@ -133,7 +87,7 @@ void producer(){
 #ifdef DEBUG        
 		cout << pthread_self() << " Pushing item: " << i << endl;
 #endif
-		while(fifo.push(item)<0){
+		while(fifo.push(item) != tsFIFO::Status::SUCCESS){
             usleep(1);
 #ifdef DEBUG            
             cout << pthread_self() << " Fifo full: " << i << endl;
@@ -145,7 +99,7 @@ void producer(){
 void consumer(){
 	while(1){
 		std::unique_ptr<ITEM> item;
-		if(fifo.pull(item, 1) > 0) {
+		if(fifo.pull(item, 100) == tsFIFO::Status::SUCCESS) {
             ;
 #ifdef DEBUG        
             cout << pthread_self() << " Pulled item ------: " << item->_value << endl;

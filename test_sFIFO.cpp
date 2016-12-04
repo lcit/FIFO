@@ -32,10 +32,8 @@ class ITEM {
 };
 
 // Definition of the FIFO we use here
-typedef sFIFO<std::unique_ptr<ITEM>, FIFOdumpTypes::DumpNewItem> bigFIFO;
-typedef sFIFO<std::unique_ptr<ITEM>, FIFOdumpTypes::DumpNewItem> smallFIFO;
-//typedef FIFO<unsigned, FIFOdumpTypes::DumpFirstEntry> smallFIFO2;
-
+using bigFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
+using smallFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
 
 // forward declaration of thread functions
 void *writing(void *arg);

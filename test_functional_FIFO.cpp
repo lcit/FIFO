@@ -30,19 +30,19 @@
 // we can analyse afterward if all the items are present (~and int he right order)
 class ITEM {
 	public:
-		string _id;
+		std::string _id;
 		int _idx_producer;
         int _value;
-        ITEM(const string id, const int value) 
+        ITEM(const std::string id, const int value) 
                 :_id(id),_idx_producer(0), _value(value) {}
-		ITEM(const string id, const int idx_producer, const int value) 
+		ITEM(const std::string id, const int idx_producer, const int value) 
                 :_id(id),_idx_producer(idx_producer), _value(value) {}
 		~ITEM(){}
 };
 
 // Definition of the FIFOs we use here
-using bigFIFO = FIFO<std::unique_ptr<ITEM>, FIFOdumpTypes::DumpNewItem>;
-using smallFIFO = FIFO<std::unique_ptr<ITEM>, FIFOdumpTypes::DumpNewItem>;
+using bigFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
+using smallFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
 
 // Some global variables for the threads
 const int Nthreads = 10; // number of producers and consumers to create
@@ -59,7 +59,7 @@ void producer(int idx_producer){
 #ifdef DEBUG        
 		cout << pthread_self() << " Pushing item: " << i << endl;
 #endif
-		while(fifo.push(item)<0){
+		while(fifo.push(item) != tsFIFO::Status::SUCCESS){
             usleep(1000);
 #ifdef DEBUG            
             cout << pthread_self() << " Fifo full: " << i << endl;
@@ -95,7 +95,7 @@ void producer(int idx_producer){
 void consumer(){
 	while(1){
 		std::unique_ptr<ITEM> item;        
-		if(fifo.pull(item,1) > 0) {
+		if(fifo.pull(item,100) == tsFIFO::Status::SUCCESS) {
 #ifdef DEBUG        
             cout << pthread_self() << " Pulled item ------: " << item->_value << endl;
 #endif      
@@ -143,7 +143,7 @@ int main(){
 	std::unique_ptr<ITEM> item8 = std::make_unique<ITEM>("id", 6);
 	// Here we try to push another element into the FIFO
 	// but it is not possible since the fifo is full
-    assert(fifo.push(item8)==-1);
+    assert(fifo.push(item8)==tsFIFO::Status::FULL);
 	
 	fifo.pull(item3);
     assert(item3->_value==1);
@@ -160,7 +160,7 @@ int main(){
     assert(fifo.size()==0);
     
     // since the fifo is empty if we call pull we should obtain a timeout
-    assert(fifo.pull(item3, 1)==0);
+    assert(fifo.pull(item3, 100)==tsFIFO::Status::TIMEOUT);
 
     // ===============================================
 	// Here instead we test if the FIFO is thread-safe
