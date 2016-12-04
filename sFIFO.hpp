@@ -2,10 +2,10 @@
 	Author: Leonardo Citraro
 	Company: 
 	Filename: sFIFO.hpp
-	Last modifed: 10.07.2016 by Leonardo Citraro
-	Description: Thread-safe FIFO based on the Standard C++ library queue
-				template class. This FIFO can be used when ITEMs' size is in seconds
-				as for video frames. Therefore, the FIFO's size is in seconds.
+	Last modifed: 04.12.2016 by Leonardo Citraro
+	Description:    Thread-safe FIFO based on the Standard C++ library queue
+                    template class. This FIFO can be used with ITEMs that can
+                    be measured in time as for video frames.
 
 =========================================================================
 
