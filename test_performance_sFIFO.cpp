@@ -1,7 +1,7 @@
 /*	=========================================================================
 	Author: Leonardo Citraro
 	Company: 
-	Filename: test_performance_FIFO.cpp
+	Filename: test_performance_sFIFO.cpp
 	Last modifed:   03.12.2016 by Leonardo Citraro
 	Description:	Test of performance.
 
@@ -9,7 +9,7 @@
 
 	=========================================================================
 */
-#include "FIFO.hpp"
+#include "sFIFO.hpp"
 #include <iostream>
 #include <iomanip>
 #include <memory>
@@ -70,14 +70,15 @@ class ITEM {
 		int _value;	
 		ITEM(const std::string id, const int value):_id(id), _value(value) {}
 		~ITEM(){}
+        std::chrono::milliseconds get_size_seconds(){return std::chrono::milliseconds(1200);}
 };
 
-using MyFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
+using MyFIFO = tsFIFO::sFIFO<std::unique_ptr<ITEM>, std::chrono::milliseconds, tsFIFO::ActionIfFull::Nothing>;
 
 // there is quite a bit of overhead in this measurment so 
 // it's good to use a big number here (>1000000)
 const int Npushes = 1000000;
-MyFIFO fifo(100);
+MyFIFO fifo(std::chrono::milliseconds(100000));
 
 void producer(){
 	for(unsigned int i=0; i<Npushes; i++){
@@ -142,7 +143,7 @@ double run_threads(size_t Nproducers, size_t Nconsumers){
 
 int main(int argc, char* argv[]){
     
-    std::cout << "++++++ Testing FIFO ++++++" << "\n";
+    std::cout << "++++++ Testing sFIFO ++++++" << "\n";
     std::cout << "Number of pushes and pulls: " << Npushes << "\n";
     std::cout << "The unit of measurment: [items transferred per millisecond (+-std-dev)]" << "\n";
     std::cout << "        ------------------------------ Consumer threads ------------------------------------" << "\n";

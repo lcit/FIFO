@@ -1,7 +1,7 @@
 /*	=========================================================================
 	Author: Leonardo Citraro
 	Company: 
-	Filename: test_functional_FIFO.cpp
+	Filename: test_functional_sFIFO.cpp
 	Last modifed:   03.12.2016 by Leonardo Citraro
 	Description:	Functional tests. Here we test if all the proposed
                     functionality work as expected. Then we test if the fifo 
@@ -12,6 +12,7 @@
 
 	=========================================================================
 */
+#include "sFIFO.hpp"
 #include <iostream>
 #include <memory>
 #include <string>
@@ -19,11 +20,13 @@
 #include <cassert>
 #include <thread>
 #include <mutex>
+#include <chrono>
 #include <unistd.h>
 #include <sys/wait.h>
-#include "FIFO.hpp"
 
 //#define DEBUG 1
+
+using TimeUnit = std::chrono::milliseconds;
 
 // Test item for the FIFO
 // Here we keep track of the ID of the producer that produced the item so
@@ -38,16 +41,17 @@ class ITEM {
 		ITEM(const std::string id, const int idx_producer, const int value) 
                 :_id(id),_idx_producer(idx_producer), _value(value) {}
 		~ITEM(){}
+        TimeUnit get_size_seconds(){return TimeUnit(1200);}
 };
 
 // Definition of the FIFOs we use here
-using bigFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
-using smallFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
+using bigFIFO = tsFIFO::sFIFO<std::unique_ptr<ITEM>, TimeUnit, tsFIFO::ActionIfFull::Nothing>;
+using smallFIFO = tsFIFO::sFIFO<std::unique_ptr<ITEM>, TimeUnit, tsFIFO::ActionIfFull::Nothing>;
 
 // Some global variables for the threads
 const int Nthreads = 10; // number of producers and consumers to create
 const int Npushes = 10000; // number of push & pull to perform
-bigFIFO fifo(100);
+bigFIFO fifo(TimeUnit(100));
 //td::array<std::vector<int>,Nthreads> verif;
 int verif[Nthreads][Npushes] = {{0}};
 std::mutex mtx;
@@ -111,14 +115,23 @@ void consumer(){
 #endif    
 }
 
+bool is_equal(TimeUnit a, TimeUnit b, const float epsilon = 1e-5){
+    //auto c = a - b;
+    //return c < epsilon && -c < epsilon;
+    return a==b;
+}
+
 int main(){
 	// ===============================================
     // here we test the functionality of the FIFO
     // ===============================================
 	smallFIFO fifo;
 	
-	fifo.set_max_size(5);
-	assert(fifo.get_max_size() == 5);
+	fifo.set_max_size_seconds(TimeUnit(5000));
+	assert(fifo.get_max_size_seconds() == TimeUnit(5000));
+    
+    fifo.set_max_size_seconds(std::chrono::seconds(5));
+	assert(fifo.get_max_size_seconds() == std::chrono::seconds(5));
 
 	std::unique_ptr<ITEM> item = std::make_unique<ITEM>("id", 9);
 	fifo.push(item);
@@ -130,6 +143,7 @@ int main(){
 	assert(item3->_value==9);
 	
 	assert(fifo.size()==1);
+    assert(is_equal(fifo.size_seconds(),TimeUnit(1200)));
 	
 	std::unique_ptr<ITEM> item4 = std::make_unique<ITEM>("id", 2);
 	fifo.push(item4);
@@ -160,6 +174,7 @@ int main(){
         
     // the fifo should be empty now
     assert(fifo.size()==0);
+    assert(is_equal(fifo.size_seconds(),TimeUnit(0)));
     
 #ifdef DEBUG    
     std::cout << "Testing the pull timeout\n";
@@ -173,9 +188,11 @@ int main(){
 	fifo.push(item10);
     
     assert(fifo.size()==2);
+    assert(is_equal(fifo.size_seconds(),TimeUnit(2400)));
     
     fifo.clear();
     assert(fifo.size()==0);
+    assert(is_equal(fifo.size_seconds(),TimeUnit(0)));
 
     // ===============================================
 	// Here instead we test if the FIFO is thread-safe

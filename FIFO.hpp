@@ -2,9 +2,9 @@
 	Author: Leonardo Citraro
 	Company: 
 	Filename: FIFO.hpp
-	Last modifed: 03.12.2016 by Leonardo Citraro
-	Description: Thread-safe FIFO based on the Standard C++ library queue
-				 template class.
+	Last modifed:   04.12.2016 by Leonardo Citraro
+	Description:    Thread-safe FIFO based on the Standard C++ library queue
+                    template class.
 
 	=========================================================================
 
@@ -35,9 +35,9 @@ namespace tsFIFO {
     };
 
     enum class Status {
-        ERROR = -1, ///< 
-        SUCCESS, ///<
-        FULL,
+        ERROR = -1, ///< when something weird happen
+        SUCCESS, ///< when the function call do what you want
+        FULL, ///< when the FIFO is full. It does not implies that there was an error.
         TIMEOUT
     };
 
@@ -51,7 +51,7 @@ namespace tsFIFO {
     ///     int size = fifo.size();
     ///     fifo.pull(temp);
     ///
-    template <typename T, ActionIfFull action_if_full> class FIFO{
+    template <typename T, ActionIfFull action_if_full = ActionIfFull::DumpFirstEntry> class FIFO{
 
     protected:
         std::queue<T>           _queue; 
@@ -60,33 +60,30 @@ namespace tsFIFO {
         std::mutex              _mutex;
 
     public:
-        FIFO() : _max_size(10.0){}
+        FIFO() : _max_size(0){}
         FIFO(int size) : _max_size(size){}
         virtual ~FIFO(){}
 
-    public:	
+    public:
         /// Adds an item into the FIFO. (Thread-safe)
         ///
-        /// If the FIFO is full FIFOdumpTypes defines which item is dumped.
+        /// If the FIFO is full ActionIfFull defines the action to undertake.
         ///
         /// @param item: element to push into the fifo
         /// @return no return
         Status push(T& item){
             std::unique_lock<std::mutex> _lock(_mutex);
-            // if the FIFO is full one item is dumped
+            // must use _helper() otherwise we lock the mutex twice
             if(is_full_helper()){
-                // choose dumping method
                 if(action_if_full == ActionIfFull::Nothing){
-                    ;
+                    ; // nothing to do
                 }else if(action_if_full == ActionIfFull::DumpFirstEntry){
-                    // dump the the oldest item in the FIFO and add the new one
-                    pull_pop_first();
-                    push_last(item);
+                    pull_pop_first(); // dump the the oldest item
+                    push_last(item); // add the new one
                 }
                 return Status::FULL; 
             }else{ 
-                // add item into the FIFO
-                push_last(item); 
+                push_last(item); // add item into the FIFO
             }
             _condv.notify_one();
             return Status::SUCCESS;
@@ -101,7 +98,7 @@ namespace tsFIFO {
         /// @return no return
         void pull(T& item){
             std::unique_lock<std::mutex> _lock(_mutex);
-            // if FIFO is empty wait until new data is avvailable.
+            // if FIFO is empty wait until new data is available.
             // This while loop is necessary if there are multiple 
             // threads pulling at the same time!
             while(_queue.empty()){ 
@@ -135,37 +132,39 @@ namespace tsFIFO {
         ///
         /// @param no param
         /// @return current number of item in the fifo
-        int size(){
+        int size() {
             std::unique_lock<std::mutex> _lock(_mutex);
-            return size_helper();
+            return _queue.size();
         }
         
         /// Sets the max FIFO size. (Thread-safe)
         ///
         /// @param size: max fifo size
         /// @return no param
-        void set_max_size(int size){
+        void set_max_size(int size) {
             std::unique_lock<std::mutex> _lock(_mutex);
-            set_max_size_helper(size);
+            _max_size = size;
         }
         
         /// Gets the max FIFO size. (Thread-safe)
         ///
         /// @param no param
         /// @return max fifo size
-        int get_max_size(){
+        int get_max_size() {
             std::unique_lock<std::mutex> _lock(_mutex);
-            return get_max_size_helper();
+            return _max_size;
         }
         
         /// Delete all the items. (Thread-safe)
         ///
         /// @param no param
         /// @return no param
-        void clear(){
+        void clear() {
             std::unique_lock<std::mutex> _lock(_mutex);
             try{
-                clear_helper();
+                std::queue<T> empty;
+                // swap() throws if T's constructor throws
+                std::swap(_queue,empty);
             }catch(...){
                 throw;
             }
@@ -175,42 +174,22 @@ namespace tsFIFO {
         ///
         /// @param no param
         /// @return no param
-        bool is_full(){
+        bool is_full() {
             std::unique_lock<std::mutex> _lock(_mutex);
             return is_full_helper();
         }
         
-        
     protected:
-        // the following functions are not thread-safe but
-        // are useful when subclassing this template.
-        // see sFIFO for more details	
-
-        /// Checks if FIFO is full
-        ///
-        /// @param no param
-        /// @return true or false
-        virtual bool is_full_helper(){
-            return (_queue.size() >= _max_size);
-        }
-
         /// Gets the first item then pop it	
         ///
         /// @param no param
         /// @return the item
-        /*	
         virtual T pull_pop_first(){
             // move() never throw
             T item = std::move(_queue.front());
             _queue.pop();
             return std::move(item);
         }	
-        * */
-        virtual T pull_pop_first(){
-            T item = std::move(_queue.front());
-            _queue.pop();
-            return std::move(item);
-        }
 
         /// Add item into the FIFO
         ///
@@ -219,40 +198,13 @@ namespace tsFIFO {
         virtual void push_last(T& item){
             _queue.push(std::move(item)); 
         }
-
-        /// Clear whole FIFO
+        
+        /// Check if FIFO is full.
         ///
         /// @param no param
         /// @return no param
-        virtual void clear_helper(){
-            std::queue<T> empty;
-            // swap() throws if T's constructor throws
-            std::swap(_queue,empty);
-        }
-
-    protected:
-        /// Current FIFO's size
-        ///
-        /// @param no param
-        /// @return size of the fifo
-        int size_helper(){
-            return _queue.size();
-        }
-
-        /// Set max FIFO's size
-        ///
-        /// @param size: max FIFO size
-        /// @return no param
-        void set_max_size_helper(int size){
-            _max_size = size;
-        }
-
-        /// Get max FIFO's size
-        ///
-        /// @param no param
-        /// @return max FIFO size
-        int get_max_size_helper(){
-            return _max_size;
+        virtual bool is_full_helper() {
+            return (_queue.size() >= _max_size);
         }
     };
 };
