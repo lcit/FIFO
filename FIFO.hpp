@@ -22,7 +22,6 @@
 #include <condition_variable>
 #include <queue>
 #include <chrono>
-#include <memory>
 #include <sys/time.h>
 
 namespace tsFIFO {
@@ -44,14 +43,15 @@ namespace tsFIFO {
     /// Example usage:
     ///
     ///     const unsigned TIMEOUTms = 100;
-    ///     tsFIFO::FIFO<std::unique_ptr<float>, tsFIFO::ActionIfFull::Nothing> fifo(5);
-    ///     std::unique_ptr<float> temp = std::make_unique<float>(2.1);	
+    ///     tsFIFO::FIFO<float*, tsFIFO::ActionIfFull::Nothing> fifo(5);
+    ///     float* temp = new float(2.1);
     ///     if( fifo.push(temp) != tsFIFO::ActionIfFull::SUCCESS )
     ///         std::cout << "The FIFO is full or an error as occurred.\n";
     ///     int size = fifo.size();
     ///     fifo.pull(temp);
     ///     if( fifo.pull(temp, TIMEOUTms) == tsFIFO::ActionIfFull::TIMEOUT )
     ///         std::cout << "Timeout! The FIFO is empty.\n";
+    ///     delete temp;
     ///
     template<typename T, ActionIfFull action_if_full = ActionIfFull::DumpFirstEntry> class FIFO {
 
@@ -79,9 +79,10 @@ namespace tsFIFO {
             if(is_full_helper()) {
                 if(action_if_full == ActionIfFull::Nothing) {
                     ; // nothing to do
-                }else if(action_if_full == ActionIfFull::DumpFirstEntry) {
-                    pull_pop_first(); // dump the the oldest item
-                    push_last(item); // add the new one
+                }else if(action_if_full == ActionIfFull::DumpFirstEntry) { 
+                    T to_dump = pull_pop_first(); // dump the the oldest item
+                    delete to_dump; // add the new one
+                    push_last(item);
                 }
                 return Status::FULL; 
             } else { 
@@ -164,6 +165,12 @@ namespace tsFIFO {
         void clear() {
             std::unique_lock<std::mutex> _lock(_mutex);
             try {
+                // delete all the elements
+                for(int i=0; i<_queue.size(); ++i){
+                    T item = pull_pop_first();
+                    delete item;
+                }
+                // replace the queue with a new clean one
                 std::queue<T> empty;
                 // swap() throws if T's constructor throws
                 std::swap(_queue,empty);
@@ -188,9 +195,9 @@ namespace tsFIFO {
         /// @return the item
         virtual T pull_pop_first() {
             // move() never throw
-            T item = std::move(_queue.front());
+            T item = _queue.front();
             _queue.pop();
-            return std::move(item);
+            return item;
         }	
 
         /// Add item into the FIFO
@@ -198,7 +205,7 @@ namespace tsFIFO {
         /// @param item: the item to add
         /// @return no return
         virtual void push_last(T& item) {
-            _queue.push(std::move(item)); 
+            _queue.push(item); 
         }
         
         /// Check if FIFO is full.

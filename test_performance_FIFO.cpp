@@ -67,12 +67,12 @@ auto generate_string = [](size_t len){
 class ITEM {
 	public:
 		std::string _id;
-		int _value;	
+		int _value;
 		ITEM(const std::string id, const int value):_id(id), _value(value) {}
 		~ITEM(){}
 };
 
-using MyFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
+using MyFIFO = tsFIFO::FIFO<ITEM*, tsFIFO::ActionIfFull::Nothing>;
 
 // there is quite a bit of overhead in this measurment so 
 // it's good to use a big number here (>1000000)
@@ -81,7 +81,7 @@ MyFIFO fifo(100);
 
 void producer(){
 	for(unsigned int i=0; i<Npushes; i++){
-		std::unique_ptr<ITEM> item = std::make_unique<ITEM>("id", i);
+		ITEM* item = new ITEM("id", i);
 #ifdef DEBUG        
 		cout << pthread_self() << " Pushing item: " << i << endl;
 #endif
@@ -96,12 +96,13 @@ void producer(){
 
 void consumer(){
 	while(1){
-		std::unique_ptr<ITEM> item;
+		ITEM* item;
 		if(fifo.pull(item, 100) == tsFIFO::Status::SUCCESS) { // 100ms timeout
             ;
 #ifdef DEBUG        
             cout << pthread_self() << " Pulled item ------: " << item->_value << endl;
-#endif            
+#endif
+            delete item;
         } else
             break; // the consumer stops when hit the timeout
 	}

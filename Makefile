@@ -12,7 +12,7 @@ OBJS        =
 LDFLAGS     = -g $(DEPS)
 # /////////////////////////////////////////////////////////////////////////
 
-all: test_functional_FIFO test_functional_sFIFO test_performance_FIFO test_performance_sFIFO #test_sFIFO
+all: test_functional_FIFO test_performance_FIFO #test_functional_sFIFO test_performance_sFIFO #test_sFIFO
 
 test_performance_FIFO: test_performance_FIFO.cpp
 	$(CPP) $(CPPFLAGS) -o test_performance_FIFO test_performance_FIFO.cpp FIFO.hpp $(OBJS) $(LDFLAGS)
