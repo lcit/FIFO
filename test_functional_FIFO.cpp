@@ -43,6 +43,7 @@ class ITEM {
 // Definition of the FIFOs we use here
 using bigFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
 using smallFIFO = tsFIFO::FIFO<std::unique_ptr<ITEM>, tsFIFO::ActionIfFull::Nothing>;
+using smallFIFOC = tsFIFO::FIFO<ITEM*, tsFIFO::ActionIfFull::Nothing>;
 
 // Some global variables for the threads
 const int Nthreads = 10; // number of producers and consumers to create
@@ -112,70 +113,144 @@ void consumer(){
 }
 
 int main(){
-	// ===============================================
-    // here we test the functionality of the FIFO
-    // ===============================================
-	smallFIFO fifo;
-	
-	fifo.set_max_size(5);
-	assert(fifo.get_max_size() == 5);
-
-	std::unique_ptr<ITEM> item = std::make_unique<ITEM>("id", 9);
-	fifo.push(item);
-	std::unique_ptr<ITEM> item2 = std::make_unique<ITEM>("id", 1);
-	fifo.push(item2);
-	
-	std::unique_ptr<ITEM> item3;
-	fifo.pull(item3);
-	assert(item3->_value==9);
-	
-	assert(fifo.size()==1);
-	
-	std::unique_ptr<ITEM> item4 = std::make_unique<ITEM>("id", 2);
-	fifo.push(item4);
-	std::unique_ptr<ITEM> item5 = std::make_unique<ITEM>("id", 3);
-	fifo.push(item5);
-	std::unique_ptr<ITEM> item6 = std::make_unique<ITEM>("id", 4);
-	fifo.push(item6);
-	std::unique_ptr<ITEM> item7 = std::make_unique<ITEM>("id", 5);
-	fifo.push(item7);
-    
-    assert(fifo.is_full()==true);
-	
-	std::unique_ptr<ITEM> item8 = std::make_unique<ITEM>("id", 6);
-	// Here we try to push another element into the FIFO
-	// but it is not possible since the fifo is full
-    assert(fifo.push(item8)==tsFIFO::Status::FULL);
-	
-	fifo.pull(item3);
-    assert(item3->_value==1);
-	fifo.pull(item3);
-	assert(item3->_value==2);
-	fifo.pull(item3);
-	assert(item3->_value==3);
-	fifo.pull(item3);
-	assert(item3->_value==4);
-	fifo.pull(item3);
-	assert(item3->_value==5);
+    {
+        // ===============================================
+        // here we test the functionality of the FIFO
+        // ===============================================
+        smallFIFO fifo;
         
-    // the fifo should be empty now
-    assert(fifo.size()==0);
-    
+        fifo.set_max_size(5);
+        assert(fifo.get_max_size() == 5);
+
+        std::unique_ptr<ITEM> item = std::make_unique<ITEM>("id", 9);
+        fifo.push(item);
+        std::unique_ptr<ITEM> item2 = std::make_unique<ITEM>("id", 1);
+        fifo.push(item2);
+        
+        std::unique_ptr<ITEM> item3;
+        fifo.pull(item3);
+        assert(item3->_value==9);
+        
+        assert(fifo.size()==1);
+        
+        std::unique_ptr<ITEM> item4 = std::make_unique<ITEM>("id", 2);
+        fifo.push(item4);
+        std::unique_ptr<ITEM> item5 = std::make_unique<ITEM>("id", 3);
+        fifo.push(item5);
+        std::unique_ptr<ITEM> item6 = std::make_unique<ITEM>("id", 4);
+        fifo.push(item6);
+        std::unique_ptr<ITEM> item7 = std::make_unique<ITEM>("id", 5);
+        fifo.push(item7);
+        
+        assert(fifo.is_full()==true);
+        
+        std::unique_ptr<ITEM> item8 = std::make_unique<ITEM>("id", 6);
+        // Here we try to push another element into the FIFO
+        // but it is not possible since the fifo is full
+        assert(fifo.push(item8)==tsFIFO::Status::FULL);
+        
+        fifo.pull(item3);
+        assert(item3->_value==1);
+        fifo.pull(item3);
+        assert(item3->_value==2);
+        fifo.pull(item3);
+        assert(item3->_value==3);
+        fifo.pull(item3);
+        assert(item3->_value==4);
+        fifo.pull(item3);
+        assert(item3->_value==5);
+            
+        // the fifo should be empty now
+        assert(fifo.size()==0);
+        
 #ifdef DEBUG    
-    std::cout << "Testing the pull timeout\n";
+        std::cout << "Testing the pull timeout\n";
 #endif     
-    // since the fifo is empty if we call pull we should obtain a timeout
-    assert(fifo.pull(item3, 100)==tsFIFO::Status::TIMEOUT);
-    
-    std::unique_ptr<ITEM> item9 = std::make_unique<ITEM>("id", 7);
-	fifo.push(item9);
-	std::unique_ptr<ITEM> item10 = std::make_unique<ITEM>("id", 8);
-	fifo.push(item10);
-    
-    assert(fifo.size()==2);
-    
-    fifo.clear();
-    assert(fifo.size()==0);
+        // since the fifo is empty if we call pull we should obtain a timeout
+        assert(fifo.pull(item3, 100)==tsFIFO::Status::TIMEOUT);
+        
+        std::unique_ptr<ITEM> item9 = std::make_unique<ITEM>("id", 7);
+        fifo.push(item9);
+        std::unique_ptr<ITEM> item10 = std::make_unique<ITEM>("id", 8);
+        fifo.push(item10);
+        
+        assert(fifo.size()==2);
+        
+        fifo.clear();
+        assert(fifo.size()==0);
+    }
+    {
+        // ===============================================
+        // same test as before but with C-style pointers
+        // ===============================================
+        smallFIFOC fifo;
+        
+        fifo.set_max_size(5);
+        assert(fifo.get_max_size() == 5);
+
+        ITEM* item = new ITEM("id", 9);
+        fifo.push(item);
+        ITEM* item2 = new ITEM("id", 1);
+        fifo.push(item2);
+        
+        ITEM* item3;
+        fifo.pull(item3);
+        assert(item3->_value==9);
+        delete item3;
+        
+        assert(fifo.size()==1);
+        
+        ITEM* item4 = new ITEM("id", 2);
+        fifo.push(item4);
+        ITEM* item5 = new ITEM("id", 3);
+        fifo.push(item5);
+        ITEM* item6 = new ITEM("id", 4);
+        fifo.push(item6);
+        ITEM* item7 = new ITEM("id", 5);
+        fifo.push(item7);
+        
+        assert(fifo.is_full()==true);
+        
+        ITEM* item8 = new ITEM("id", 6);
+        // Here we try to push another element into the FIFO
+        // but it is not possible since the fifo is full
+        assert(fifo.push(item8)==tsFIFO::Status::FULL);
+        
+        fifo.pull(item3);
+        assert(item3->_value==1);
+        delete item3;
+        fifo.pull(item3);
+        assert(item3->_value==2);
+        delete item3;
+        fifo.pull(item3);
+        assert(item3->_value==3);
+        delete item3;
+        fifo.pull(item3);
+        assert(item3->_value==4);
+        delete item3;
+        fifo.pull(item3);
+        assert(item3->_value==5);
+        delete item3;
+            
+        // the fifo should be empty now
+        assert(fifo.size()==0);
+        
+#ifdef DEBUG    
+        std::cout << "Testing the pull timeout\n";
+#endif     
+        // since the fifo is empty if we call pull we should obtain a timeout
+        assert(fifo.pull(item3, 100)==tsFIFO::Status::TIMEOUT);
+        
+        ITEM* item9 = new ITEM("id", 7);
+        fifo.push(item9);
+        ITEM* item10 = new ITEM("id", 8);
+        fifo.push(item10);
+        
+        assert(fifo.size()==2);
+        
+        fifo.clear();
+        assert(fifo.size()==0);
+    }
 
     // ===============================================
 	// Here instead we test if the FIFO is thread-safe

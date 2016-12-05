@@ -39,6 +39,18 @@ namespace tsFIFO {
         TIMEOUT
     };
 
+    // helper function able to dicriminate C-style pointers from other types.
+    // C-style pointers must be explicitely deleted, other types not.
+    template<typename T>
+    void clear_helper(T* item){
+        delete item;
+    }
+    
+    template<typename T>
+    void clear_helper(T& item){}
+    
+
+
     /// Thread-safe FIFO buffer using STL queue.
     ///
     /// Example usage:
@@ -164,6 +176,12 @@ namespace tsFIFO {
         void clear() {
             std::unique_lock<std::mutex> _lock(_mutex);
             try {
+                for(int i=0; i<_queue.size(); ++i) {
+                    T item = pull_pop_first();
+                    // the correct clear_helper is deduced.
+                    // For C-style pointers, clear_helper() calls delete.
+                    clear_helper(item);
+                }
                 std::queue<T> empty;
                 // swap() throws if T's constructor throws
                 std::swap(_queue,empty);

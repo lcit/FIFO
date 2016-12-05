@@ -94,6 +94,12 @@ namespace tsFIFO {
             void clear(){
                 std::unique_lock<std::mutex> _lock(this->_mutex);
                 try{
+                    for(int i=0; i<this->_queue.size(); ++i) {
+                        T item = pull_pop_first();
+                        // the correct clear_helper is deduced.
+                        // For C-style pointers, clear_helper() calls delete.
+                        clear_helper(item);
+                    }
                     std::queue<T> empty;
                     std::swap(this->_queue,empty);
                     _size_seconds = TimeT();
