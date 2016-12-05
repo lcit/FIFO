@@ -30,4 +30,4 @@ test_sFIFO: test_sFIFO.cpp
 	$(CPP) $(CPPFLAGS) -o test_sFIFO test_sFIFO.cpp sFIFO.hpp $(OBJS) $(LDFLAGS)
 
 clean:
-	-rm -f *.o; rm test_FIFO; rm test_sFIFO; rm test_performance_FIFO; rm test_functional_FIFO
+	-rm -f *.o; rm test_FIFO; rm test_sFIFO; rm test_performance_FIFO; rm test_functional_FIFO; rm test_performance_sFIFO; rm test_functional_sFIFO
